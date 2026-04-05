@@ -1,228 +1,288 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { create } from 'zustand';
-import styled, { createGlobalStyle, keyframes } from 'styled-components';
+import { persist } from 'zustand/middleware';
+import styled, { createGlobalStyle, keyframes, css } from 'styled-components';
 
-// --- Global Styles ---
+// --- Global Theme & Reset ---
 const GlobalStyle = createGlobalStyle`
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syncopate:wght@400;700&display=swap');
+
   body {
     margin: 0;
     padding: 0;
-    font-family: 'Exo 2', sans-serif;
-    background: #0a0a1a; /* Deep Cyberpunk Blue */
+    background: #010103;
     color: #fff;
+    font-family: 'Space Mono', monospace;
     overflow: hidden;
+    user-select: none;
   }
 `;
 
-// --- State ---
-const useStore = create((set) => ({
-  index: 0,
-  collected: [],
-  dinos: [
-    {
-      id: 'rex',
-      name: "NEO-REX",
-      type: "Fire Type",
-      color: "#ff3e3e",
-      glow: "rgba(255, 62, 62, 0.5)",
-      description: "A digital predator born from overclocked fossil data.",
-      power: "SS"
-    },
-    {
-      id: 'tri',
-      name: "SHIELD-TRI",
-      type: "Electric Type",
-      color: "#3effd4",
-      glow: "rgba(62, 255, 212, 0.5)",
-      description: "Equipped with a high-frequency vibration frill.",
-      power: "S+"
-    }
-  ],
-  next: () => set((state) => ({ index: (state.index + 1) % state.dinos.length })),
-  prev: () => set((state) => ({ index: (state.index - 1 + state.dinos.length) % state.dinos.length })),
-  collect: (id) => set((state) => ({ 
-    collected: state.collected.includes(id) ? state.collected : [...state.collected, id] 
-  }))
-}));
+// --- State Management ---
+const useStore = create(
+  persist(
+    (set) => ({
+      index: 0,
+      collected: [],
+      dinos: [
+        {
+          id: 'rex',
+          name: "V-REX .01",
+          class: "APEX_PREDATOR",
+          color: "#ff004c",
+          description: "Neural-linked fossil data suggests a bite force capable of crushing titanium alloys.",
+          stats: { atk: 98, spd: 82, nrg: 65 }
+        },
+        {
+          id: 'tri',
+          name: "TRI-PLATE .03",
+          class: "HEAVY_DEFENSE",
+          color: "#00f7ff",
+          description: "Sub-dermal plating acts as a kinetic battery, storing impact energy for counter-discharges.",
+          stats: { atk: 60, spd: 45, nrg: 95 }
+        }
+      ],
+      setNext: () => set((state) => ({ index: (state.index + 1) % state.dinos.length })),
+      setPrev: () => set((state) => ({ index: (state.index - 1 + state.dinos.length) % state.dinos.length })),
+      toggleCollect: (id) => set((state) => ({
+        collected: state.collected.includes(id) 
+          ? state.collected.filter(i => i !== id) 
+          : [...state.collected, id]
+      }))
+    }),
+    { name: 'paleo-os-cache' }
+  )
+);
 
-// --- Anime CSS Components ---
-const float = keyframes`
-  0%, 100% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-20px) rotate(2deg); }
+// --- Animations ---
+const scanMove = keyframes`
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(500%); }
 `;
 
-const pulse = keyframes`
-  0%, 100% { opacity: 0.8; filter: blur(40px); }
-  50% { opacity: 1; filter: blur(60px); }
+const glitchAnim = keyframes`
+  0% { transform: translate(0); }
+  20% { transform: translate(-3px, 3px); }
+  40% { transform: translate(-3px, -3px); }
+  60% { transform: translate(3px, 3px); }
+  80% { transform: translate(3px, -3px); }
+  100% { transform: translate(0); }
 `;
 
-const DinoContainer = styled.div`
+// --- Styled Components ---
+const Stage = styled.div`
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, ${props => props.glow}15 0%, #010103 100%);
+  transition: background 1s ease;
   position: relative;
-  width: 400px;
+`;
+
+const Grid = styled.div`
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(${props => props.color}08 1px, transparent 1px),
+                    linear-gradient(90deg, ${props => props.color}08 1px, transparent 1px);
+  background-size: 40px 40px;
+  perspective: 1000px;
+  transform: rotateX(60deg) translateY(-150px);
+  opacity: 0.6;
+`;
+
+const DinoContainer = styled.div.attrs(props => ({
+  style: {
+    transform: `rotateX(${props.ry}deg) rotateY(${props.rx}deg)`,
+  },
+}))`
+  position: relative;
+  width: 500px;
   height: 400px;
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: ${float} 4s ease-in-out infinite;
+  transition: transform 0.15s ease-out;
+  pointer-events: none;
+
+  /* The Glitch Logic Fix */
+  ${props => props.isGlitching && css`
+    animation: ${glitchAnim} 0.15s infinite;
+  `}
 `;
 
-const Aura = styled.div`
-  position: absolute;
-  width: 300px;
-  height: 300px;
-  border-radius: 50%;
+const ModelBase = styled.div`
   background: ${props => props.color};
-  filter: blur(50px);
-  z-index: -1;
-  animation: ${pulse} 3s infinite;
-`;
-
-// Stylized Anime T-Rex Head
-const NeoRex = styled.div`
-  width: 300px;
-  height: 250px;
-  background: ${props => props.color};
-  /* The "Anime Jaw" Shape */
-  clip-path: polygon(0% 20%, 60% 0%, 100% 10%, 100% 60%, 70% 50%, 80% 100%, 20% 100%, 10% 70%);
+  box-shadow: 0 0 50px ${props => props.color}44;
+  border: 1px solid #fff;
   position: relative;
-  border: 4px solid #fff;
+  transition: all 0.4s ease;
 
-  &::after { /* The Eye */
+  &::before {
     content: '';
     position: absolute;
-    top: 25%; right: 20%;
-    width: 40px; height: 15px;
+    top: 0; left: 0; width: 100%; height: 4px;
     background: #fff;
-    clip-path: polygon(0% 50%, 100% 0%, 80% 50%, 100% 100%);
-    box-shadow: 0 0 20px #fff;
-  }
-
-  &::before { /* The Teeth */
-    content: '';
-    position: absolute;
-    bottom: 20%; left: 30%;
-    width: 100px; height: 30px;
-    background: #fff;
-    clip-path: polygon(0% 0%, 20% 100%, 40% 0%, 60% 100%, 80% 0%, 100% 100%);
+    opacity: 0.5;
+    animation: ${scanMove} 2.5s linear infinite;
+    box-shadow: 0 0 10px #fff;
   }
 `;
 
-// Stylized Anime Triceratops
-const ShieldTri = styled.div`
-  width: 320px;
+const RexModel = styled(ModelBase)`
+  width: 340px;
+  height: 240px;
+  clip-path: polygon(0% 25%, 70% 5%, 100% 20%, 100% 75%, 80% 65%, 85% 100%, 25% 100%, 15% 85%);
+  &::after {
+    content: ''; position: absolute; top: 35%; right: 18%; width: 50px; height: 8px;
+    background: #fff; clip-path: polygon(0 50%, 100% 0, 80% 50%, 100% 100%);
+  }
+`;
+
+const TriModel = styled(ModelBase)`
+  width: 360px;
   height: 280px;
-  background: ${props => props.color};
-  /* The "Frill + Horns" Shape */
-  clip-path: polygon(0% 60%, 20% 20%, 10% 0%, 40% 10%, 50% 0%, 60% 10%, 90% 0%, 80% 20%, 100% 60%, 50% 100%);
-  position: relative;
-  border: 4px solid #fff;
-
-  &::after { /* Glowing Eyes */
-    content: '';
-    position: absolute;
-    top: 50%; left: 20%;
-    width: 60px; height: 10px;
-    background: #fff;
-    box-shadow: 0 0 30px #fff;
-    transform: rotate(-10deg);
+  clip-path: polygon(15% 80%, 25% 35%, 0% 5%, 45% 20%, 50% 5%, 55% 20%, 100% 5%, 75% 35%, 85% 80%, 50% 100%);
+  &::after {
+    content: ''; position: absolute; top: 60%; left: 22%; width: 40px; height: 6px;
+    background: #fff; transform: rotate(-12deg);
   }
 `;
 
-// --- UI Components ---
-const Layout = styled.div`
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: radial-gradient(circle at center, #1a1a3a 0%, #050505 100%);
-`;
-
-const Card = styled.div`
+const UIElement = styled.div`
   position: absolute;
-  bottom: 50px;
-  width: 90%;
-  max-width: 500px;
-  padding: 30px;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border-left: 5px solid ${props => props.color};
-  border-radius: 0 20px 20px 0;
+  pointer-events: auto;
 `;
 
-const NavBtn = styled.button`
-  position: fixed;
+const Sidebar = styled(UIElement)`
+  left: 60px;
   top: 50%;
-  ${props => props.right ? 'right: 30px;' : 'left: 30px;'}
-  background: none;
-  border: 2px solid #fff;
-  color: #fff;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  font-size: 20px;
-  cursor: pointer;
-  transition: 0.3s;
-  &:hover { background: #fff; color: #000; }
+  transform: translateY(-50%);
+  width: 280px;
 `;
 
+const StatBar = styled.div`
+  margin-bottom: 20px;
+  label { font-size: 0.55rem; letter-spacing: 2px; opacity: 0.4; display: block; }
+  .track { 
+    height: 3px; background: rgba(255,255,255,0.05); margin-top: 6px; position: relative; 
+    &::after {
+      content: ''; position: absolute; left: 0; top: 0; height: 100%;
+      width: ${props => props.val}%;
+      background: ${props => props.color};
+      transition: width 1.2s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+  }
+`;
+
+const Header = styled(UIElement)`
+  top: 60px;
+  left: 60px;
+  font-family: 'Syncopate', sans-serif;
+  h2 { margin: 0; font-size: 2.2rem; color: ${props => props.color}; letter-spacing: -2px; }
+  span { font-size: 0.65rem; letter-spacing: 4px; opacity: 0.4; }
+`;
+
+const Controls = styled(UIElement)`
+  right: 60px;
+  bottom: 60px;
+  display: flex;
+  gap: 15px;
+`;
+
+const SquareBtn = styled.button`
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #fff;
+  padding: 15px 25px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  transition: 0.2s;
+  &:hover { background: #fff; color: #000; border-color: #fff; }
+`;
+
+// --- Main App ---
 export default function App() {
-  const { index, dinos, next, prev, collect, collected } = useStore();
+  const { index, dinos, setNext, setPrev, toggleCollect, collected } = useStore();
   const active = dinos[index];
+  
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+  const [isGlitching, setIsGlitching] = useState(false);
+
+  // Smooth mouse tracking
+  useEffect(() => {
+    const handleMove = (e) => {
+      setMouse({
+        x: (e.clientX / window.innerWidth - 0.5) * 35,
+        y: (e.clientY / window.innerHeight - 0.5) * -35
+      });
+    };
+    window.addEventListener('mousemove', handleMove);
+    return () => window.removeEventListener('mousemove', handleMove);
+  }, []);
+
+  const handleNavigation = (direction) => {
+    setIsGlitching(true);
+    setTimeout(() => {
+      direction === 'next' ? setNext() : setPrev();
+      setIsGlitching(false);
+    }, 200);
+  };
+
+  const isSync = collected.includes(active.id);
 
   return (
-    <Layout>
+    <Stage glow={active.color}>
       <GlobalStyle />
-      
-      <NavBtn onClick={prev}>PREV</NavBtn>
-      <NavBtn right onClick={next}>NEXT</NavBtn>
+      <Grid color={active.color} />
 
-      <DinoContainer>
-        <Aura color={active.glow} />
+      <Header color={active.color}>
+        <span>ARCHIVE_SEQ_{index + 1}</span>
+        <h2>{active.name}</h2>
+      </Header>
+
+      <Sidebar>
+        <p style={{ fontSize: '0.75rem', lineHeight: '1.7', opacity: 0.6, marginBottom: '30px' }}>
+          {active.description}
+        </p>
+        
+        <StatBar val={active.stats.atk} color={active.color}><label>POTENTIAL_OUTPUT</label><div className="track" /></StatBar>
+        <StatBar val={active.stats.spd} color={active.color}><label>REACTION_NODE</label><div className="track" /></StatBar>
+        <StatBar val={active.stats.nrg} color={active.color}><label>CORE_STABILITY</label><div className="track" /></StatBar>
+
+        <button 
+          onClick={() => toggleCollect(active.id)}
+          style={{
+            marginTop: '30px', padding: '12px', width: '100%',
+            background: isSync ? 'transparent' : '#fff',
+            color: isSync ? '#fff' : '#000',
+            border: '1px solid #fff', cursor: 'pointer', fontWeight: 'bold',
+            fontSize: '0.7rem', letterSpacing: '1px'
+          }}
+        >
+          {isSync ? '[ DATA_LOCKED ]' : 'INIT_NEURAL_SYNC'}
+        </button>
+      </Sidebar>
+
+      <DinoContainer rx={mouse.x} ry={mouse.y} isGlitching={isGlitching}>
         {active.id === 'rex' ? (
-          <NeoRex color={active.color} />
+          <RexModel color={active.color} />
         ) : (
-          <ShieldTri color={active.color} />
+          <TriModel color={active.color} />
         )}
       </DinoContainer>
 
-      <Card color={active.color}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h4 style={{ margin: 0, color: active.color, letterSpacing: '2px' }}>{active.type}</h4>
-            <h1 style={{ margin: '5px 0', fontSize: '3rem', fontWeight: '900' }}>{active.name}</h1>
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#ffd700' }}>{active.power}</div>
-        </div>
-        <p style={{ opacity: 0.7, lineHeight: '1.6' }}>{active.description}</p>
-        
-        <button 
-          onClick={() => collect(active.id)}
-          style={{
-            marginTop: '20px',
-            padding: '12px 30px',
-            background: collected.includes(active.id) ? '#333' : active.color,
-            color: '#fff',
-            border: 'none',
-            fontWeight: 'bold',
-            clipPath: 'polygon(10% 0, 100% 0, 90% 100%, 0 100%)',
-            cursor: 'pointer'
-          }}
-        >
-          {collected.includes(active.id) ? 'DATA SECURED' : 'INITIATE CAPTURE'}
-        </button>
-      </Card>
+      <Controls>
+        <SquareBtn onClick={() => handleNavigation('prev')}>&lt; PREV</SquareBtn>
+        <SquareBtn onClick={() => handleNavigation('next')}>NEXT &gt;</SquareBtn>
+      </Controls>
 
-      {/* Progress Tracker */}
-      <div style={{ position: 'fixed', top: '40px', display: 'flex', gap: '10px' }}>
-        {dinos.map((d, i) => (
-          <div key={d.id} style={{
-            width: '40px', height: '6px', 
-            background: i === index ? active.color : '#222',
-            transition: '0.3s'
-          }} />
-        ))}
+      <div style={{ position: 'fixed', bottom: '30px', left: '60px', fontSize: '0.55rem', opacity: 0.3 }}>
+        SYS_STATUS: {isGlitching ? 'RE-INDEXING...' : 'IDLE'} // BANDWIDTH: 1.2GBPS // LOC: EL_MOUROUJ_TUNISIA
       </div>
-    </Layout>
+    </Stage>
   );
 }
